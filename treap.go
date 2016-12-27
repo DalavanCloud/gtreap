@@ -167,6 +167,12 @@ func (t *Treap) join(this *node, that *node) *node {
 
 type ItemVisitor func(i Item) bool
 
+// Iterator returns an ascending Iterator instance that is bound to this Treap.
+// The iterator begins at "pivot" and iterates through the end of the Treap.
+func (t *Treap) Iterator(pivot Item) *Iterator {
+	return newIterator(t, pivot)
+}
+
 // Visit items greater-than-or-equal to the pivot.
 func (t *Treap) VisitAscend(pivot Item, visitor ItemVisitor) {
 	t.visitAscend(t.root, pivot, visitor)
@@ -185,4 +191,79 @@ func (t *Treap) visitAscend(n *node, pivot Item, visitor ItemVisitor) bool {
 		}
 	}
 	return t.visitAscend(n.right, pivot, visitor)
+}
+
+// Iterator supports iterative ascending traversal of the Treap. An Iterator is
+// instantiated by calling a Treap's Iterator method.
+type Iterator struct {
+	t     *Treap
+	pivot Item
+	stack []stackNode
+}
+
+type stackNode struct {
+	n       *node
+	visited bool
+}
+
+func newIterator(t *Treap, pivot Item) *Iterator {
+	it := Iterator{t: t, pivot: pivot}
+	it.pushStack(t.root, false)
+	return &it
+}
+
+// Next returns the next Item in the iteration sequence.
+//
+// If another item exists in the iteration sequence, true will be returned as
+// the second return value; if not, false will be returned, indicating end of
+// iteration. Additional calls to Next after end of iteration will continue
+// to return false.
+func (it *Iterator) Next() (Item, bool) {
+	for {
+		n, visited := it.popStack()
+		if n == nil {
+			return nil, false
+		}
+
+		if visited {
+			// Only nodes that have already satisfied comparison will be placed on
+			// the stack as "visited", so we can safely process them without
+			// performing the comparison again.
+			return n.item, true
+		}
+
+		if n.right != nil {
+			it.pushStack(n.right, false)
+		}
+		if it.t.compare(it.pivot, n.item) <= 0 {
+			// Visit our left node first. We will push "n" back onto the stack and
+			// mark it visited so we don't revisit its children.
+			if n.left == nil {
+				// No left node, so we will skip the stack and visit "n" this round.
+				return n.item, true
+			}
+
+			// Process "n" after its left child. Mark it "visited" so we don't re-push
+			// entries onto the stack or re-compare.
+			it.pushStack(n, true)
+			it.pushStack(n.left, false)
+		}
+	}
+}
+
+func (it *Iterator) pushStack(n *node, visited bool) {
+	it.stack = append(it.stack, stackNode{n, visited})
+}
+
+func (it *Iterator) popStack() (n *node, visited bool) {
+	end := len(it.stack) - 1
+	if end < 0 {
+		return nil, false
+	}
+
+	sn := &it.stack[end]
+	n, visited = sn.n, sn.visited
+	sn.n = nil // Clear the node reference from our stack.
+	it.stack = it.stack[:end]
+	return
 }

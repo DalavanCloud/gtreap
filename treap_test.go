@@ -96,9 +96,11 @@ func load(x *Treap, arr []string) *Treap {
 	return x
 }
 
-func visitExpect(t *testing.T, x *Treap, start string, arr []string) {
+type treapVisitor func(x *Treap, pivot Item, visitor ItemVisitor)
+
+func visitExpect(t *testing.T, x *Treap, v treapVisitor, start string, arr []string) {
 	n := 0
-	x.VisitAscend(start, func(i Item) bool {
+	v(x, start, func(i Item) bool {
 		if i.(string) != arr[n] {
 			t.Errorf("expected visit item: %v, saw: %v", arr[n], i)
 		}
@@ -107,26 +109,27 @@ func visitExpect(t *testing.T, x *Treap, start string, arr []string) {
 	})
 	if n != len(arr) {
 		t.Errorf("expected # visit callbacks: %v, saw: %v", len(arr), n)
+		panic(nil)
 	}
 }
 
-func TestVisit(t *testing.T) {
+func testVisitImpl(t *testing.T, fn treapVisitor) {
 	x := NewTreap(stringCompare)
-	visitExpect(t, x, "a", []string{})
+	visitExpect(t, x, fn, "a", []string{})
 
 	x = load(x, []string{"e", "d", "c", "c", "a", "b", "a"})
 
 	visitX := func() {
-		visitExpect(t, x, "a", []string{"a", "b", "c", "d", "e"})
-		visitExpect(t, x, "a1", []string{"b", "c", "d", "e"})
-		visitExpect(t, x, "b", []string{"b", "c", "d", "e"})
-		visitExpect(t, x, "b1", []string{"c", "d", "e"})
-		visitExpect(t, x, "c", []string{"c", "d", "e"})
-		visitExpect(t, x, "c1", []string{"d", "e"})
-		visitExpect(t, x, "d", []string{"d", "e"})
-		visitExpect(t, x, "d1", []string{"e"})
-		visitExpect(t, x, "e", []string{"e"})
-		visitExpect(t, x, "f", []string{})
+		visitExpect(t, x, fn, "a", []string{"a", "b", "c", "d", "e"})
+		visitExpect(t, x, fn, "a1", []string{"b", "c", "d", "e"})
+		visitExpect(t, x, fn, "b", []string{"b", "c", "d", "e"})
+		visitExpect(t, x, fn, "b1", []string{"c", "d", "e"})
+		visitExpect(t, x, fn, "c", []string{"c", "d", "e"})
+		visitExpect(t, x, fn, "c1", []string{"d", "e"})
+		visitExpect(t, x, fn, "d", []string{"d", "e"})
+		visitExpect(t, x, fn, "d1", []string{"e"})
+		visitExpect(t, x, fn, "e", []string{"e"})
+		visitExpect(t, x, fn, "f", []string{})
 	}
 	visitX()
 
@@ -136,17 +139,17 @@ func TestVisit(t *testing.T) {
 	y = y.Upsert("cc", 2)
 	y = y.Delete("c")
 
-	visitExpect(t, y, "a", []string{"b", "cc", "d", "e", "f"})
-	visitExpect(t, y, "a1", []string{"b", "cc", "d", "e", "f"})
-	visitExpect(t, y, "b", []string{"b", "cc", "d", "e", "f"})
-	visitExpect(t, y, "b1", []string{"cc", "d", "e", "f"})
-	visitExpect(t, y, "c", []string{"cc", "d", "e", "f"})
-	visitExpect(t, y, "c1", []string{"cc", "d", "e", "f"})
-	visitExpect(t, y, "d", []string{"d", "e", "f"})
-	visitExpect(t, y, "d1", []string{"e", "f"})
-	visitExpect(t, y, "e", []string{"e", "f"})
-	visitExpect(t, y, "f", []string{"f"})
-	visitExpect(t, y, "z", []string{})
+	visitExpect(t, y, fn, "a", []string{"b", "cc", "d", "e", "f"})
+	visitExpect(t, y, fn, "a1", []string{"b", "cc", "d", "e", "f"})
+	visitExpect(t, y, fn, "b", []string{"b", "cc", "d", "e", "f"})
+	visitExpect(t, y, fn, "b1", []string{"cc", "d", "e", "f"})
+	visitExpect(t, y, fn, "c", []string{"cc", "d", "e", "f"})
+	visitExpect(t, y, fn, "c1", []string{"cc", "d", "e", "f"})
+	visitExpect(t, y, fn, "d", []string{"d", "e", "f"})
+	visitExpect(t, y, fn, "d1", []string{"e", "f"})
+	visitExpect(t, y, fn, "e", []string{"e", "f"})
+	visitExpect(t, y, fn, "f", []string{"f"})
+	visitExpect(t, y, fn, "z", []string{})
 
 	// an uninitialized treap
 	z := NewTreap(stringCompare)
@@ -185,7 +188,25 @@ func TestVisit(t *testing.T) {
 	}
 }
 
-func visitExpectEndAtC(t *testing.T, x *Treap, start string, arr []string) {
+func TestVisit(t *testing.T) {
+	testVisitImpl(t, func(x *Treap, pivot Item, visitor ItemVisitor) {
+		x.VisitAscend(pivot, visitor)
+	})
+}
+
+func TestVisitIter(t *testing.T) {
+	testVisitImpl(t, func(x *Treap, pivot Item, visitor ItemVisitor) {
+		it := x.Iterator(pivot)
+		for {
+			i, ok := it.Next()
+			if !ok || !visitor(i) {
+				return
+			}
+		}
+	})
+}
+
+func visitExpectEndAtC(t *testing.T, x *Treap, fn treapVisitor, start string, arr []string) {
 	n := 0
 	x.VisitAscend(start, func(i Item) bool {
 		if stringCompare(i, "c") > 0 {
@@ -202,25 +223,43 @@ func visitExpectEndAtC(t *testing.T, x *Treap, start string, arr []string) {
 	}
 }
 
-func TestVisitEndEarly(t *testing.T) {
+func testVisitEndEarlyImpl(t *testing.T, fn treapVisitor) {
 	x := NewTreap(stringCompare)
-	visitExpectEndAtC(t, x, "a", []string{})
+	visitExpectEndAtC(t, x, fn, "a", []string{})
 
 	x = load(x, []string{"e", "d", "c", "c", "a", "b", "a", "e"})
 
 	visitX := func() {
-		visitExpectEndAtC(t, x, "a", []string{"a", "b", "c"})
-		visitExpectEndAtC(t, x, "a1", []string{"b", "c"})
-		visitExpectEndAtC(t, x, "b", []string{"b", "c"})
-		visitExpectEndAtC(t, x, "b1", []string{"c"})
-		visitExpectEndAtC(t, x, "c", []string{"c"})
-		visitExpectEndAtC(t, x, "c1", []string{})
-		visitExpectEndAtC(t, x, "d", []string{})
-		visitExpectEndAtC(t, x, "d1", []string{})
-		visitExpectEndAtC(t, x, "e", []string{})
-		visitExpectEndAtC(t, x, "f", []string{})
+		visitExpectEndAtC(t, x, fn, "a", []string{"a", "b", "c"})
+		visitExpectEndAtC(t, x, fn, "a1", []string{"b", "c"})
+		visitExpectEndAtC(t, x, fn, "b", []string{"b", "c"})
+		visitExpectEndAtC(t, x, fn, "b1", []string{"c"})
+		visitExpectEndAtC(t, x, fn, "c", []string{"c"})
+		visitExpectEndAtC(t, x, fn, "c1", []string{})
+		visitExpectEndAtC(t, x, fn, "d", []string{})
+		visitExpectEndAtC(t, x, fn, "d1", []string{})
+		visitExpectEndAtC(t, x, fn, "e", []string{})
+		visitExpectEndAtC(t, x, fn, "f", []string{})
 	}
 	visitX()
+}
+
+func TestVisitEndEarly(t *testing.T) {
+	testVisitEndEarlyImpl(t, func(x *Treap, pivot Item, visitor ItemVisitor) {
+		x.VisitAscend(pivot, visitor)
+	})
+}
+
+func TestVisitEndEarlyIter(t *testing.T) {
+	testVisitEndEarlyImpl(t, func(x *Treap, pivot Item, visitor ItemVisitor) {
+		it := x.Iterator(pivot)
+		for {
+			i, ok := it.Next()
+			if !ok || !visitor(i) {
+				return
+			}
+		}
+	})
 }
 
 func TestPriorityAfterUpsert(t *testing.T) {
